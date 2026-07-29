@@ -1,0 +1,2 @@
+parakeet-mlx>=0.5.2
+wyoming>=1.10.0

@@ -34,7 +34,7 @@ All figures measured on one machine: **M4 Mac mini (10-core, 32 GB), macOS 26.5*
 to warm up, then runs a timed pass. Latency is the **median** of that pass;
 means are skewed by first-request kernel compilation.
 
-Reproduce with `./bench/make_clips.sh && ./bench/benchmark.py --backend ...`.
+Every row is reproducible — see [Reproducing](#reproducing) below.
 
 | Backend | Runtime | Median | p90 | Exact | Digits | Silence |
 |---|---|--:|--:|--:|--:|---|
@@ -87,6 +87,90 @@ What the numbers say:
 - **Latency is raw inference**, excluding Wyoming protocol overhead. End to
   end through this server, expect roughly 15–35 ms on top.
 - One machine, one run each. Treat differences of a few percent as noise.
+
+### Reproducing
+
+**1. Set up a throwaway venv.** Keep the benchmark dependencies out of the
+service venv — they pull in CTranslate2, ONNX Runtime and a second copy of
+MLX, none of which the server needs:
+
+```bash
+python3.13 -m venv /tmp/bench-venv          # same requirement as install.sh:
+/tmp/bench-venv/bin/pip install -r bench/requirements.txt
+```
+
+Use an explicit interpreter, not bare `python3` — on macOS that is still the
+system Python 3.9, which has no MLX wheels and fails with
+`No matching distribution found for parakeet-mlx`. Homebrew's
+`python3.11`/`3.12`/`3.13`/`3.14` all work.
+
+**2. Render the clips** (macOS only — it uses the built-in `say` voices):
+
+```bash
+./bench/make_clips.sh
+```
+
+Writes 49 files to `bench/clips/` (16 phrases × 3 voices, plus silence). They
+are gitignored; regenerating them is deterministic for a given macOS release,
+but voice quality does change between releases, so numbers are only strictly
+comparable within one machine.
+
+**3. Run a backend.** The `--backend` argument is `kind:model`:
+
+```bash
+/tmp/bench-venv/bin/python bench/benchmark.py \
+    --backend parakeet:mlx-community/parakeet-tdt-0.6b-v2
+```
+
+Add `--json` for a single machine-readable line instead of the human report,
+and `--label` to control the name in the output. Without `--json` it also
+prints every mismatch with expected-vs-actual, which is the useful bit when a
+model scores worse than you expected.
+
+If you have `HF_HUB_OFFLINE=1` exported (the service sets it), prefix the
+command with `HF_HUB_OFFLINE=` so it can fetch models it has not seen.
+
+**The exact commands behind each table row:**
+
+| Row | Command |
+|---|---|
+| moonshine tiny | `--backend moonshine:moonshine/tiny` |
+| moonshine base | `--backend moonshine:moonshine/base` |
+| parakeet-tdt-0.6b-v2 | `--backend parakeet:mlx-community/parakeet-tdt-0.6b-v2` |
+| parakeet-tdt-0.6b-v3 | `--backend parakeet:mlx-community/parakeet-tdt-0.6b-v3` |
+| faster-whisper tiny.en | `--backend faster-whisper:tiny.en` |
+| faster-whisper base.en | `--backend faster-whisper:base.en` |
+| faster-whisper small.en | `--backend faster-whisper:small.en` |
+| faster-whisper distil-large-v3 | `--backend faster-whisper:distil-large-v3` |
+| mlx-whisper large-v3-turbo | `--backend mlx-whisper:mlx-community/whisper-large-v3-turbo` |
+| mlx-whisper large-v3 | `--backend mlx-whisper:mlx-community/whisper-large-v3-mlx` |
+| whisper.cpp \* | `--backend whispercpp:http://127.0.0.1:8920/inference` |
+
+\* The whisper.cpp rows need a server running first. That requires your own
+[whisper.cpp](https://github.com/ggml-org/whisper.cpp) build — ideally with
+`-DWHISPER_COREML=1` for the CoreML encoder, which is what the table
+measured:
+
+```bash
+./build/bin/whisper-server -m models/ggml-large-v3-turbo.bin \
+    --host 127.0.0.1 --port 8920 -nc -sns -l en -t 4
+```
+
+`-nc` matters. Without it the server carries decoder context between requests
+and periodically returns the previous utterance, which would make whisper.cpp
+look far worse than it is. The table gives it its best configuration
+deliberately.
+
+**Cost.** The full sweep is roughly 15 minutes of compute, dominated by
+`distil-large-v3` at ~4.3 s per clip, plus however long it takes to pull about
+7 GB of models. To clean up afterwards:
+
+```bash
+rm -rf /tmp/bench-venv bench/clips
+rm -rf ~/.cache/huggingface/hub/models--mlx-community--whisper-large-v3*
+rm -rf ~/.cache/huggingface/hub/models--Systran--faster-*
+rm -rf ~/.cache/huggingface/hub/models--UsefulSensors--moonshine*
+```
 
 ## Requirements
 

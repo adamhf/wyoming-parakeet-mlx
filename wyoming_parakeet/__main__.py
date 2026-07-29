@@ -8,7 +8,7 @@ from wyoming.info import AsrModel, AsrProgram, Attribution, Info
 from wyoming.server import AsyncServer
 
 from .engine import ParakeetEngine
-from .handler import ParakeetEventHandler
+from .handler import DEFAULT_MAX_AUDIO_SECONDS, ParakeetEventHandler
 
 _LOGGER = logging.getLogger(__name__)
 __version__ = "1.0.0"
@@ -25,7 +25,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--uri", required=True, help="unix:// or tcp://")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="HuggingFace model id")
     parser.add_argument("--language", default="en", help="Language code reported to HA")
-    parser.add_argument("--debug", action="store_true", help="Log DEBUG messages")
+    parser.add_argument(
+        "--max-audio-seconds",
+        type=float,
+        default=DEFAULT_MAX_AUDIO_SECONDS,
+        help="Cap on buffered audio per utterance (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Log DEBUG messages, including transcript text",
+    )
     parser.add_argument("--log-format", default=logging.BASIC_FORMAT)
     parser.add_argument("--version", action="version", version=__version__)
     return parser

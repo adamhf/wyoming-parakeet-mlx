@@ -302,6 +302,47 @@ tail -f /tmp/local.wyoming-parakeet.stderr
 
 Each request logs audio duration, inference time and the transcript.
 
+## Security
+
+**The Wyoming protocol has no authentication or transport encryption.** Any
+client that can reach the port can submit audio, and Home Assistant trusts
+whatever this service returns — a transcript becomes an intent, and an intent
+unlocks doors. Treat the port as a trust boundary and keep it on a network you
+control.
+
+Two things this server does about that:
+
+- **Buffered audio is capped** (`--max-audio-seconds`, default 120). Audio
+  accumulates until `AudioStop`, and a client that never sends one — malicious
+  or just stuck — otherwise grows the buffer indefinitely. Measured at ~11 MB/s
+  over loopback, enough to exhaust 32 GB in under an hour from one connection.
+  Over the cap, further audio is dropped with a single warning and whatever was
+  captured is still transcribed.
+- **Transcripts are not logged at INFO.** The log records duration, latency and
+  character count; the text itself is behind `--debug`. Log files are
+  long-lived, and on macOS `/tmp` they are world-readable by default — meaning
+  every voice command would otherwise sit in plaintext readable by any local
+  account.
+
+Worth doing yourself, depending on your threat model:
+
+- **Bind to one interface.** The daemon listens on `0.0.0.0`, so it is exposed
+  on every network the host is attached to — including VPN interfaces like
+  Tailscale, which is easy to overlook. Set the URI to a specific address
+  (`--uri tcp://192.168.1.10:7892`) or firewall the port to your Home
+  Assistant host.
+- **Do not run it as an admin account.** The installer defaults `--user` to
+  whoever runs it. On a typical macOS setup that account is in `admin`, and if
+  `%admin` has a `NOPASSWD` sudo rule then a compromise of this service is a
+  direct path to root. A dedicated non-admin service account costs nothing.
+- **Pin your dependencies** if you care about supply chain. `requirements.txt`
+  is deliberately loose so `install.sh` picks up fixes; pin exact versions (and
+  ideally hashes) if you would rather audit upgrades. Model weights are
+  `safetensors`, so loading them does not execute code, but the initial
+  download from HuggingFace is trust-on-first-use — pin a revision if that
+  matters to you. `HF_HUB_OFFLINE=1` in the daemon means it never re-fetches
+  after that point.
+
 ## License
 
 MIT

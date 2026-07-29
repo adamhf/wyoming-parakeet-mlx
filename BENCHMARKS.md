@@ -23,6 +23,20 @@ means are skewed by first-request kernel compilation.
 | mlx-whisper large-v3 | MLX | 1170 ms | 1251 ms | 48/48 | 21/21 | `"thank you"` |
 | faster-whisper distil-large-v3 | CPU int8 | 4269 ms | 4304 ms | 46/48 | 21/21 | `"thank you"` |
 
+### How to read this
+
+- **Median** — the typical time to transcribe one command. This is the number
+  you feel when talking to your assistant.
+- **p90** — nine times out of ten it was at least this fast. A p90 close to the
+  median means consistent; a long tail is worse than the median suggests.
+- **Exact** — how many of the 48 clips came back word-for-word correct.
+- **Digits** — of the 21 clips containing a number, how many wrote it as `21`
+  rather than `twenty one`. This matters more than it looks; see
+  [Model choice](README.md#model-choice-v2-not-v3).
+- **Silence** — what came back for three seconds of pure silence. Anything
+  other than nothing is the model inventing words, which your assistant then
+  tries to act on.
+
 **Exact** is a strict string match after normalising case, punctuation and
 whitespace. **Digits** counts how many of the 21 number-bearing clips came
 back with digits rather than spelled-out words — see
@@ -59,6 +73,11 @@ What the numbers say:
 - **Latency is raw inference**, excluding Wyoming protocol overhead. End to
   end through this server, expect roughly 15–35 ms on top.
 - One machine, one run each. Treat differences of a few percent as noise.
+- **These are a point-in-time snapshot.** Nothing re-runs them automatically,
+  and the test suite cannot detect drift, so treat them as stale after any
+  change to the audio path, a `parakeet-mlx`/MLX upgrade, or a macOS release
+  (which changes the TTS voices the clips are built from). Re-run the sweep
+  and update the table in the same commit as the change.
 
 ## Reproducing
 

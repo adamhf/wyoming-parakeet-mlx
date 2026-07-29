@@ -40,17 +40,31 @@ latency).
 
 ## Requirements
 
-- Apple Silicon Mac (MLX is Metal/ANE-backed)
-- Python 3.10+ **with the `lzma` module** — `librosa` pulls in `pooch`, which
-  imports it. Pythons built without `xz` (a common pyenv default) pass every
-  version check and then fail at import time with
-  `ModuleNotFoundError: _lzma`. Homebrew's Python is fine.
-- ~2.3 GB disk for the model, ~600 MB for MLX wheels
+- **An Apple Silicon Mac** (M1 or newer) that stays on. This does not run on
+  Intel Macs, a Raspberry Pi, or inside Home Assistant OS.
+- **Homebrew Python.** If you are not sure you have it:
+  ```bash
+  brew install python@3.13
+  ```
+- **About 3 GB of free disk** — 2.3 GB of model, 600 MB of libraries.
 
-`ffmpeg` is **not** required — Wyoming already delivers 16 kHz mono PCM, so
-the mel spectrogram is built directly.
+<details>
+<summary>Why Homebrew Python specifically</summary>
+
+The installer needs Python 3.10 or newer that includes the `lzma` module.
+macOS ships Python 3.9, which is too old, and `pyenv` frequently builds
+Python without `lzma` (it needs `xz` present at build time). Both fail — the
+pyenv case unhelpfully, passing every version check and then dying at import
+time with `ModuleNotFoundError: _lzma`. Homebrew's builds are fine.
+
+`ffmpeg` is **not** required, unlike most speech-to-text tooling. Wyoming
+already delivers audio in the right format, so this builds the mel
+spectrogram directly.
+</details>
 
 ## Install
+
+**1. Download and run the installer.**
 
 ```bash
 git clone https://github.com/adamhf/wyoming-parakeet-mlx
@@ -58,23 +72,115 @@ cd wyoming-parakeet-mlx
 ./install.sh
 ```
 
-This creates a virtualenv, runs the unit tests, pre-downloads the model, and
-registers a LaunchDaemon on port 7892 that starts at boot without needing a
-GUI login. It installs *in place*, so keep the checkout somewhere permanent.
+It will ask for your password once, to register the background service.
 
-Options: `--port`, `--model`, `--user`, `--python`, `--no-daemon`,
-`--no-download`.
+Expect it to take a few minutes — most of that is downloading the model. It
+sets up its own Python environment, runs the test suite, downloads the model,
+and registers a background service on port 7892 that starts automatically when
+the Mac boots, with no need to log in.
 
-Then in Home Assistant: **Settings → Devices & Services → Add Integration →
-Wyoming Protocol**, enter the host and port, and select the new engine as the
-speech-to-text step of your Assist pipeline.
+**Keep this folder where it is.** The installer sets things up inside it, so
+moving or deleting the folder afterwards breaks the service.
 
-Remove it with `./uninstall.sh`.
+Remove it later with `./uninstall.sh`.
 
-### Server options
+<details>
+<summary>Installer options</summary>
 
-`install.sh` bakes these into the plist; run `script/run --help` to see them
-all. The ones worth knowing:
+`--port`, `--model`, `--user`, `--python`, `--no-daemon`, `--no-download`.
+Run `./install.sh --help` for details. See [Security](#security) for why
+`--user` is worth using.
+</details>
+
+## Connect it to Home Assistant
+
+Installing it is not enough on its own — Home Assistant has to be told about
+it, and then told to *use* it. That is two separate steps, and the second one
+is easy to miss.
+
+**1. Find your Mac's IP address.** System Settings → Network → click your
+active connection → Details → the "IP address" field. Or in a terminal:
+
+```bash
+ifconfig | grep "inet " | grep -v 127.0.0.1
+```
+
+That command often lists more addresses than you expect. Ignore anything
+belonging to virtualisation software (Parallels, VMware, Docker — commonly
+`10.211.55.x`, `10.37.129.x`, `172.17.x.x`) or a VPN (Tailscale uses
+`100.x.x.x`); those are not reachable from Home Assistant in the usual case.
+You want the one on the same network as Home Assistant itself — if Home
+Assistant is on `192.168.1.50`, you want the Mac's `192.168.1.x` address.
+
+If your Mac has both Wi-Fi and Ethernet active you will see two candidates.
+Either works, but pick one that will stay put — a wired address, ideally with
+a DHCP reservation on your router — because if that interface goes away, Home
+Assistant loses speech-to-text.
+
+**2. Add the integration.** In Home Assistant: **Settings → Devices &
+Services → Add Integration → Wyoming Protocol**. Enter the IP address from
+step 1 and port **7892**.
+
+If it succeeds you get a new entry called `parakeet-mlx`. If it says it cannot
+connect, see [Troubleshooting](#troubleshooting).
+
+**3. Actually use it.** Go to **Settings → Voice assistants**, click your
+assistant, and set **Speech-to-text** to `parakeet-mlx`. Save.
+
+Until you do this, nothing changes — you will have installed it and Home
+Assistant will carry on using whatever it used before. If you have more than
+one assistant configured, change each one you care about.
+
+**4. Try it.** Click the Assist icon (top right of Home Assistant), press the
+microphone, and say something like "turn off the kitchen lights".
+
+## Check it's working
+
+Is the service running?
+
+```bash
+sudo launchctl print system/local.wyoming-parakeet | grep "state ="
+```
+
+Expect `state = running`.
+
+Watch it work — leave this running, then speak to Assist:
+
+```bash
+tail -f /tmp/local.wyoming-parakeet.stderr
+```
+
+Each command produces a line like
+`2.70s audio -> 124ms, 45 chars`. The `124ms` is how long transcription took.
+The text itself is deliberately not logged; see [Security](#security).
+
+Test it without speaking, using generated audio:
+
+```bash
+./test/make-clips.sh
+.venv/bin/python test/wy-test.py test/clips/*.wav
+```
+
+Expect ten commands transcribed correctly, `silence.wav` coming back empty,
+and times around 100–150 ms.
+
+## Troubleshooting
+
+| What you see | What it usually means |
+|---|---|
+| Home Assistant says **"Failed to connect"** when adding the integration | Wrong IP, or the service is not running. Check `state = running` above, confirm the IP with `ifconfig`, and make sure both machines are on the same network. |
+| Integration added fine, but **Assist is no worse and no faster** | You missed step 3 — the assistant is still using its old speech-to-text engine. Settings → Voice assistants → Speech-to-text. |
+| **`No matching distribution found for parakeet-mlx`** during install | Wrong Python. Run `brew install python@3.13` and try again, or point the installer at it: `./install.sh --python /opt/homebrew/bin/python3.13`. |
+| **`error: service did not start`** at the end of install | Look at `/tmp/local.wyoming-parakeet.stderr` for the reason. If you changed `--user`, re-run `./install.sh` rather than editing the service file by hand. |
+| The **first command after a reboot is slow** (~300 ms), then it is fast | Expected. The graphics framework compiles its kernels on first use. It settles by the second or third command. |
+| Everything works, then **stops after a few weeks** | Check the Mac has not gone to sleep. System Settings → Displays → Advanced → prevent automatic sleeping. |
+| You want to see **what it actually heard** | Add `--debug`, but read [Security](#security) first — the log then contains everything spoken near your microphones. |
+
+## Server options
+
+Most people never need these. `install.sh` bakes them into the service
+definition, so to change one, re-run the installer rather than editing the
+service file by hand. Run `script/run --help` for the full list.
 
 | Flag | Default | |
 |---|---|---|

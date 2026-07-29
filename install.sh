@@ -50,6 +50,10 @@ die() { echo "error: $*" >&2; exit 1; }
 [[ "$(uname -s)" == "Darwin" ]] || die "macOS only (MLX is Apple Silicon)."
 [[ "$(uname -m)" == "arm64" ]] || die "Apple Silicon required; this is $(uname -m)."
 id -u "$SERVICE_USER" >/dev/null 2>&1 || die "no such user: $SERVICE_USER"
+# Run as the service account's own primary group. Hardcoding "staff" would
+# hand a dedicated service user read access to every staff-group path,
+# including other users' home directories -- which defeats the isolation.
+SERVICE_GROUP="$(id -gn "$SERVICE_USER")"
 
 # librosa pulls in pooch, which imports lzma. Pythons built without xz (a
 # common pyenv default) satisfy every version check and then fail at import
@@ -88,6 +92,7 @@ echo "==> Python:  $PYTHON ($("$PYTHON" -V 2>&1))"
 echo "==> Install: $REPO_DIR"
 echo "==> Model:   $MODEL"
 echo "==> Port:    $PORT"
+echo "==> User:    $SERVICE_USER:$SERVICE_GROUP"
 
 # --- venv ------------------------------------------------------------------
 
@@ -143,7 +148,7 @@ cat > "$TMP_PLIST" <<EOF
 		<key>HOME</key><string>$(eval echo "~$SERVICE_USER")</string>
 	</dict>
 	<key>UserName</key><string>$SERVICE_USER</string>
-	<key>GroupName</key><string>staff</string>
+	<key>GroupName</key><string>$SERVICE_GROUP</string>
 	<key>InitGroups</key><true/>
 	<key>WorkingDirectory</key><string>$REPO_DIR</string>
 	<key>RunAtLoad</key><true/>

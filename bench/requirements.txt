@@ -1,0 +1,7 @@
+# Backends compared in the README benchmark table. Install into a throwaway
+# venv -- not the service venv.
+parakeet-mlx
+mlx-whisper
+faster-whisper
+useful-moonshine-onnx
+requests

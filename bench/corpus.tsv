@@ -1,0 +1,17 @@
+# tts_input	expected_transcript	has_number
+turn off the kitchen lights	turn off the kitchen lights	0
+set the living room thermostat to twenty one degrees	set the living room thermostat to 21 degrees	1
+what is the temperature in the bedroom	what is the temperature in the bedroom	0
+dim the hallway lights to thirty percent	dim the hallway lights to 30%	1
+is the back door locked	is the back door locked	0
+turn on the christmas tree in the conservatory	turn on the christmas tree in the conservatory	0
+set a timer for twelve minutes	set a timer for 12 minutes	1
+play radio six music in the kitchen	play radio 6 music in the kitchen	1
+what's the octopus agile rate right now	what's the octopus agile rate right now	0
+close the blinds in the study and turn on the desk lamp	close the blinds in the study and turn on the desk lamp	0
+turn the bedroom lights down to five percent	turn the bedroom lights down to 5%	1
+how much solar am I generating	how much solar am i generating	0
+lock the front door and turn off all the lights	lock the front door and turn off all the lights	0
+set the upstairs aircon to eighteen degrees	set the upstairs aircon to 18 degrees	1
+pause the music in the living room	pause the music in the living room	0
+remind me in forty five minutes	remind me in 45 minutes	1

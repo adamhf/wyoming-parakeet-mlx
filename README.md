@@ -334,7 +334,30 @@ Worth doing yourself, depending on your threat model:
 - **Do not run it as an admin account.** The installer defaults `--user` to
   whoever runs it. On a typical macOS setup that account is in `admin`, and if
   `%admin` has a `NOPASSWD` sudo rule then a compromise of this service is a
-  direct path to root. A dedicated non-admin service account costs nothing.
+  direct path to root. To use a dedicated service account:
+
+  ```bash
+  sudo dscl . -create /Groups/_parakeet PrimaryGroupID 450
+  sudo dscl . -create /Users/_parakeet UniqueID 450
+  sudo dscl . -create /Users/_parakeet PrimaryGroupID 450
+  sudo dscl . -create /Users/_parakeet UserShell /usr/bin/false
+  sudo dscl . -create /Users/_parakeet NFSHomeDirectory /usr/local/var/wyoming-parakeet
+  sudo dscl . -create /Users/_parakeet Password '*'
+  sudo dscl . -create /Users/_parakeet IsHidden 1
+  sudo mkdir -p /usr/local/var/wyoming-parakeet
+  sudo chown _parakeet:_parakeet /usr/local/var/wyoming-parakeet
+
+  ./install.sh --user _parakeet
+  ```
+
+  Two things to get right. **Keep the checkout outside your home directory** —
+  macOS home directories are `drwxr-x---`, so a service account that is not in
+  your group cannot traverse into one; `/opt/wyoming-parakeet` works, owned by
+  you so `git pull && ./install.sh` still needs no sudo, and read-only to the
+  service. And **the model cache follows `HOME`**, which is the service
+  account's home, so either let `install.sh` download it as that user or move
+  an existing `models--mlx-community--parakeet-tdt-0.6b-v2` directory into
+  `<service home>/.cache/huggingface/hub/`.
 - **Pin your dependencies** if you care about supply chain. `requirements.txt`
   is deliberately loose so `install.sh` picks up fixes; pin exact versions (and
   ideally hashes) if you would rather audit upgrades. Model weights are

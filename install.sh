@@ -162,6 +162,14 @@ cat > "$TMP_PLIST" <<EOF
 EOF
 
 plutil -lint "$TMP_PLIST" >/dev/null || die "generated plist is malformed"
+
+# launchd opens the log paths as the service user. If they already exist owned
+# by someone else -- which is exactly what happens when you re-run with a
+# different --user -- the job fails to start, and because it never gets far
+# enough to write anything, the log gives no clue why.
+for log in "/tmp/$LABEL.stdout" "/tmp/$LABEL.stderr"; do
+    [[ -e "$log" ]] && sudo chown "$SERVICE_USER" "$log"
+done
 sudo cp "$TMP_PLIST" "$PLIST"
 sudo chown root:wheel "$PLIST"
 sudo chmod 644 "$PLIST"

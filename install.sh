@@ -161,8 +161,20 @@ sudo cp "$TMP_PLIST" "$PLIST"
 sudo chown root:wheel "$PLIST"
 sudo chmod 644 "$PLIST"
 
+# bootout returns before the job is actually gone; bootstrapping into the
+# gap fails with "Bootstrap failed: 5: Input/output error" and leaves nothing
+# loaded at all. Wait for it to disappear first.
 sudo launchctl bootout "system/$LABEL" 2>/dev/null || true
-sudo launchctl bootstrap system "$PLIST"
+for _ in $(seq 1 30); do
+    sudo launchctl print "system/$LABEL" >/dev/null 2>&1 || break
+    sleep 1
+done
+if sudo launchctl print "system/$LABEL" >/dev/null 2>&1; then
+    die "$LABEL is still loaded after bootout; unload it manually and retry"
+fi
+
+sudo launchctl bootstrap system "$PLIST" \
+    || die "bootstrap failed; the service is not running. Check: sudo launchctl print system/$LABEL"
 
 echo "==> Waiting for the service to come up"
 for _ in $(seq 1 60); do
